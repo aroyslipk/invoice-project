@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>{% block title %}Invoice App{% endblock %}</title>
+  <style>
+    body { font-family: Arial; margin: 20px; }
+    header { background: #f5f5f5; padding: 10px; border-bottom: 1px solid #ccc; }
+    footer { margin-top: 20px; color: gray; font-size: 14px; }
+    nav a { margin-right: 10px; text-decoration: none; color: #333; }
+  </style>
+</head>
+<body>
+  <header>
+    <h2>🧾 Invoice Web App</h2>
+    <nav>
+      {% if request.user.is_authenticated %}
+        <a href="/my-work/">My Work</a> |
+        <a href="/dashboard/">Dashboard</a> |
+        <a href="/logout/">Logout</a>
+      {% else %}
+        <a href="/login/">Login</a>
+      {% endif %}
+    </nav>
+  </header>
+
+  {% block content %}{% endblock %}
+
+  <footer>
+    <hr>
+    <p>&copy; 2025 Your Company</p>
+  </footer>
+</body>
+</html>

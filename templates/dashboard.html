@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load dict_extras %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+  <h2>📊 Admin Dashboard</h2>
+
+  <table border="1" cellpadding="8" cellspacing="0">
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Project</th>
+        <th>Category</th>
+        <th>Quantity</th>
+        <th>Rate</th>
+        <th>Total</th>
+        <th>Date</th>
+        <th>Invoice</th> <!-- Invoice column -->
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+        {% with cat=entry.category|lower %}
+        <tr>
+          <td>{{ entry.user.username }}</td>
+          <td>{{ entry.project.name }}</td>
+          <td>{{ entry.category }}</td>
+          <td>{{ entry.quantity }}</td>
+          <td>
+            {{ prices|get_item:cat|default:"0.00" }}
+          </td>
+          <td>
+            {% with rate=prices|get_item:cat|default:"0.00" %}
+              {{ entry.quantity|floatformat:2 }} × {{ rate|floatformat:2 }}
+            {% endwith %}
+          </td>
+          <td>{{ entry.date }}</td>
+          <td>
+                {% if entry.project %}
+                  <a href="{% url 'generate_invoice' entry.project.id %}" class="btn btn-success btn-sm">
+                    Generate Invoice
+                  </a>
+          {% endif %}
+        </td>
+        </tr>
+        {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
