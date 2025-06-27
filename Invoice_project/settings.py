@@ -33,7 +33,7 @@ SECRET_KEY = os.getenv(
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 # Load allowed hosts from a comma-separated environment variable.
-ALLOWED_HOSTS_str = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost')
+ALLOWED_HOSTS_str = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost,.ngrok-free.app')
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_str.split(',')]
 
 # --- Application Definitions ---
@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     # Local apps
     'Invoice',
 ]
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

@@ -20,6 +20,7 @@ API endpoints, and business logic for the multi-tenant permission system.
 import datetime
 from pathlib import Path
 from copy import copy
+import os
 
 # Django Core Imports
 from django.contrib.auth import login
@@ -29,6 +30,7 @@ from django.contrib.auth.views import LoginView
 from django.http import HttpResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.dateparse import parse_date
+from django.conf import settings
 
 # Third-Party Library Imports
 from openpyxl import Workbook, load_workbook
@@ -194,7 +196,10 @@ def export_page_view(request):
 
 @login_required
 def generate_invoice(request, project_id):
-    """Generates and downloads an XLSX invoice for a specific project."""
+    """
+    Generates and downloads a secure, role-filtered XLSX invoice
+    using a robust method for finding the template file.
+    """
     user = request.user
     project = get_object_or_404(ClientProject, id=project_id)
 
@@ -204,23 +209,79 @@ def generate_invoice(request, project_id):
 
     # Filter data based on user role.
     if user.role == 'super_admin':
-        entries = WorkEntry.objects.filter(project=project)
+        entries = WorkEntry.objects.filter(project=project).order_by('date')
         prices_qs = Price.objects.all()
     else:  # 'admin' role
-        entries = WorkEntry.objects.filter(project=project, project__managed_by=user)
+        entries = WorkEntry.objects.filter(project=project, project__managed_by=user).order_by('date')
         prices_qs = Price.objects.filter(managed_by=user)
     
     prices = {p.category.lower(): p.rate for p in prices_qs}
     
-    # --- The rest of your invoice generation logic remains the same ---
-    # This ensures your custom Excel formatting is preserved.
-    BASE_DIR = Path(__file__).resolve().parent.parent
-    template_path = BASE_DIR / 'static' / 'template' / 'InvoiceTemplate.xlsx'
-    # ... (Your entire openpyxl logic goes here, unchanged) ...
-    # (For brevity, the Excel generation part is omitted, paste your original code here)
-    # The following is a placeholder to make the function complete.
-    # Replace this with your full openpyxl invoice generation code.
-    return HttpResponse(f"Invoice generation for project '{project.name}' in progress...")
+    template_path = os.path.join(settings.BASE_DIR, 'static', 'template', 'InvoiceTemplate.xlsx')
+
+    try:
+        wb = load_workbook(template_path)
+    except FileNotFoundError:
+        error_message = f"Error: The invoice template could not be found. Path checked: {template_path}"
+        return HttpResponse(error_message, status=500)
+
+    ws = wb.active
+    ws.protection.sheet = False
+    start_row = 14
+    
+    if entries:
+        if len(entries) > 1:
+            ws.insert_rows(start_row + 1, amount=len(entries) - 1)
+        
+        current_row = start_row
+        total_quantity_sum, total_rate_sum, total_amount_numeric = 0, 0, 0
+        
+        for entry in entries:
+            rate_for_entry = float(prices.get(entry.category.lower(), 0))
+            amount_for_entry = entry.quantity * rate_for_entry
+            total_quantity_sum += entry.quantity
+            total_rate_sum += rate_for_entry
+            total_amount_numeric += amount_for_entry
+            
+            # Populate data into cells
+            ws.cell(row=current_row, column=2).value = entry.category
+            ws.cell(row=current_row, column=3).value = entry.date.strftime("%Y-%m-%d")
+            ws.cell(row=current_row, column=4).value = entry.quantity
+            ws.cell(row=current_row, column=5).value = rate_for_entry
+            ws.cell(row=current_row, column=6).value = amount_for_entry
+            current_row += 1
+            
+        # --- Summary section ---
+        summary_start_row = start_row + len(entries) + 2
+        ws.cell(row=summary_start_row, column=4).value = total_quantity_sum
+        ws.cell(row=summary_start_row, column=4).font = Font(bold=True)
+        ws.cell(row=summary_start_row, column=5).value = total_rate_sum
+        ws.cell(row=summary_start_row, column=5).font = Font(bold=True)
+        ws.cell(row=summary_start_row, column=6).value = total_amount_numeric
+        ws.cell(row=summary_start_row, column=6).font = Font(bold=True)
+        
+        # --- Amount in words ---
+        in_words_cell = ws.cell(row=summary_start_row + 1, column=2)
+        total_in_words = num2words(total_amount_numeric, lang='en').title() + " US Dollars Only"
+        in_words_cell.value = total_in_words
+        in_words_cell.font = Font(italic=True)
+
+    # --- Project attachment link (if exists) ---
+    if project.attachment and hasattr(project.attachment, 'url'):
+        attachment_url = request.build_absolute_uri(project.attachment.url)
+        attachment_cell = ws.cell(row=ws.max_row + 2, column=2)
+        attachment_cell.value = "View Project Attachment"
+        attachment_cell.hyperlink = attachment_url
+        attachment_cell.font = Font(color="0000FF", underline="single")
+        ws.cell(row=attachment_cell.row, column=1).value = "Attachment:"
+        
+    # --- Prepare and return the response ---
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = f"Invoice_{project.name}_{datetime.date.today()}.xlsx"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    wb.save(response)
+    
+    return response
 
 # --------------------------------------------------------------------------
 # --- API Views (DRF) with full security and role-based filtering ---
