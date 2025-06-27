@@ -1,51 +1,202 @@
 {% extends "base.html" %}
-{% load dict_extras %}
 
-{% block title %}Admin Dashboard{% endblock %}
+{% block title %}Dashboard{% endblock %}
 
 {% block content %}
-  <h2>📊 Admin Dashboard</h2>
+<div class="container">
+    <h2 class="mb-4">Admin Dashboard</h2>
 
-  <table border="1" cellpadding="8" cellspacing="0">
-    <thead>
-      <tr>
-        <th>Username</th>
-        <th>Project</th>
-        <th>Category</th>
-        <th>Quantity</th>
-        <th>Rate</th>
-        <th>Total</th>
-        <th>Date</th>
-        <th>Invoice</th> <!-- Invoice column -->
-      </tr>
-    </thead>
-    <tbody>
-      {% for entry in entries %}
-        {% with cat=entry.category|lower %}
-        <tr>
-          <td>{{ entry.user.username }}</td>
-          <td>{{ entry.project.name }}</td>
-          <td>{{ entry.category }}</td>
-          <td>{{ entry.quantity }}</td>
-          <td>
-            {{ prices|get_item:cat|default:"0.00" }}
-          </td>
-          <td>
-            {% with rate=prices|get_item:cat|default:"0.00" %}
-              {{ entry.quantity|floatformat:2 }} × {{ rate|floatformat:2 }}
-            {% endwith %}
-          </td>
-          <td>{{ entry.date }}</td>
-          <td>
-                {% if entry.project %}
-                  <a href="{% url 'generate_invoice' entry.project.id %}" class="btn btn-success btn-sm">
-                    Generate Invoice
-                  </a>
-          {% endif %}
-        </td>
-        </tr>
-        {% endwith %}
-      {% endfor %}
-    </tbody>
-  </table>
+    <div class="card shadow-sm mb-4">
+        <div class="card-header">
+            <strong><i class="fas fa-filter me-1"></i>Filter & Search</strong>
+        </div>
+        <div class="card-body">
+            <form method="get" action="{% url 'dashboard' %}">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label for="project" class="form-label">Project</label>
+                        <select name="project" id="project" class="form-select">
+                            <option value="">All Projects</option>
+                            {% for p in all_projects %}
+                                <option value="{{ p.id }}" {% if p.id|stringformat:"s" == selected_project_id %}selected{% endif %}>
+                                    {{ p.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="user" class="form-label">User</label>
+                        <select name="user" id="user" class="form-select">
+                            <option value="">All Users</option>
+                            {% for u in all_users %}
+                                <option value="{{ u.id }}" {% if u.id|stringformat:"s" == selected_user_id %}selected{% endif %}>
+                                    {{ u.username }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="start_date" class="form-label">Start Date</label>
+                        <input type="date" name="start_date" id="start_date" class="form-control" value="{{ start_date|default:'' }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="end_date" class="form-label">End Date</label>
+                        <input type="date" name="end_date" id="end_date" class="form-control" value="{{ end_date|default:'' }}">
+                    </div>
+                    <div class="col-md-2 d-grid">
+                        <button type="submit" class="btn btn-primary">Apply Filter</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-white bg-primary shadow">
+                <div class="card-body">
+                    <h5 class="card-title">Total Projects</h5>
+                    <p class="card-text fs-2 fw-bold">{{ total_projects }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-success shadow">
+                <div class="card-body">
+                    <h5 class="card-title">Total Team Members</h5>
+                    <p class="card-text fs-2 fw-bold">{{ total_team_members }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-info shadow">
+                <div class="card-body">
+                    <h5 class="card-title">Work Entries This Month</h5>
+                    <p class="card-text fs-2 fw-bold">{{ current_month_entries }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-lg-7">
+            <div class="card shadow">
+                <div class="card-header">Monthly Work Entries</div>
+                <div class="card-body">
+                    <canvas id="barChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card shadow">
+                <div class="card-header">Work Distribution by Category</div>
+                <div class="card-body">
+                    <canvas id="pieChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-header">Work Entries</div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Project</th>
+                            <th>Category</th>
+                            <th>Quantity</th>
+                            <th>Date</th>
+                            <th>Actions</th> </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in entries %}
+                        <tr>
+                            <td>{{ entry.user.username }}</td>
+                            <td>{{ entry.project.name|default:"N/A" }}</td>
+                            <td>{{ entry.category }}</td>
+                            <td>{{ entry.quantity }}</td>
+                            <td>{{ entry.date|date:"d M Y" }}</td>
+                            <td>
+                                {% if entry.project %}
+                                    <a href="{% url 'generate_invoice' entry.project.id %}" class="btn btn-success btn-sm">
+                                        Generate Invoice
+                                    </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center">No work entries found for the selected filters.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // --- Bar Chart: Monthly Entries ---
+    const barCtx = document.getElementById('barChart').getContext('2d');
+    const barChart = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ bar_chart_labels|safe }},
+            datasets: [{
+                label: 'Work Entries',
+                data: {{ bar_chart_data|safe }},
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+
+    // --- Pie Chart: Category Distribution ---
+    const pieCtx = document.getElementById('pieChart').getContext('2d');
+    const pieChart = new Chart(pieCtx, {
+        type: 'pie',
+        data: {
+            labels: {{ pie_chart_labels|safe }},
+            datasets: [{
+                label: 'Work Distribution',
+                data: {{ pie_chart_data|safe }},
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.7)',
+                    'rgba(54, 162, 235, 0.7)',
+                    'rgba(255, 206, 86, 0.7)',
+                    'rgba(75, 192, 192, 0.7)',
+                    'rgba(153, 102, 255, 0.7)',
+                    'rgba(255, 159, 64, 0.7)'
+                ],
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+});
+</script>
 {% endblock %}

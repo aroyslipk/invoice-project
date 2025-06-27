@@ -31,6 +31,15 @@ from django.http import HttpResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.dateparse import parse_date
 from django.conf import settings
+from .forms import PriceForm, WorkEntryForm, AdminUserCreationForm
+from django.contrib import messages
+from .forms import PriceForm, WorkEntryForm, AdminUserCreationForm, ClientProjectForm
+from django.db.models import Count, Sum
+from django.utils import timezone
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.crypto import get_random_string
 
 # Third-Party Library Imports
 from openpyxl import Workbook, load_workbook
@@ -58,30 +67,90 @@ def home_view(request):
 
 @login_required
 def dashboard_template_view(request):
-    """Renders the main dashboard, filtering data based on user role."""
+    """
+    Renders a comprehensive, interactive dashboard that includes:
+    - Summary cards.
+    - Advanced filtering for entries.
+    - Dynamic charts that update based on the filtered data.
+    """
     user = request.user
     if user.role == 'user':
         return redirect('my_work_entries')
 
-    projects = ClientProject.objects.none()
-    prices = Price.objects.none()
-    entries = WorkEntry.objects.none()
+    # --- Step 1: Initial Querysets based on User Role ---
+    projects_qs = ClientProject.objects.all()
+    users_qs = User.objects.filter(role='user')
+    entries_qs = WorkEntry.objects.select_related('user', 'project')
 
-    if user.role == 'super_admin':
-        entries = WorkEntry.objects.select_related('user', 'project').all()
-        prices = Price.objects.all()
-        projects = ClientProject.objects.all()
-    elif user.role == 'admin':
-        entries = WorkEntry.objects.filter(project__managed_by=user)
-        prices = Price.objects.filter(managed_by=user)
-        projects = ClientProject.objects.filter(managed_by=user)
+    if user.role == 'admin':
+        projects_qs = projects_qs.filter(managed_by=user)
+        users_qs = users_qs.filter(managed_by=user)
+        entries_qs = entries_qs.filter(project__managed_by=user)
 
-    price_lookup = {p.category.lower(): p.rate for p in prices}
-    return render(request, 'dashboard.html', {
-        'entries': entries.order_by('-date'),
-        'prices': price_lookup,
-        'projects': projects
-    })
+    # --- Step 2: Apply Advanced Filtering from GET Parameters ---
+    selected_project_id = request.GET.get('project')
+    selected_user_id = request.GET.get('user')
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+
+    if selected_project_id:
+        entries_qs = entries_qs.filter(project_id=selected_project_id)
+    if selected_user_id:
+        entries_qs = entries_qs.filter(user_id=selected_user_id)
+    if start_date:
+        entries_qs = entries_qs.filter(date__gte=start_date)
+    if end_date:
+        entries_qs = entries_qs.filter(date__lte=end_date)
+    
+    # --- Step 3: Calculate Data for Cards (using filtered data) ---
+    total_projects = projects_qs.count()
+    total_team_members = users_qs.count()
+    current_month_entries = entries_qs.filter(
+        date__year=timezone.now().year,
+        date__month=timezone.now().month
+    ).count()
+    
+    # --- Step 4: Calculate Data for Charts (using the SAME filtered data) ---
+    # Pie Chart Data: Work distribution by category
+    category_data = entries_qs.values('category').annotate(count=Count('id')).order_by('-count')
+    pie_chart_labels = [item['category'] for item in category_data]
+    pie_chart_data = [item['count'] for item in category_data]
+
+    # Bar Chart Data: Monthly work entries
+    monthly_data = (
+        entries_qs.values('date__year', 'date__month')
+        .annotate(count=Count('id'))
+        .order_by('date__year', 'date__month')
+    )
+    bar_chart_labels = [f"{item['date__year']}-{item['date__month']:02d}" for item in monthly_data]
+    bar_chart_data = [item['count'] for item in monthly_data]
+
+    # --- Step 5: Prepare the Final Context for the Template ---
+    context = {
+        # Data for cards
+        'total_projects': total_projects,
+        'total_team_members': total_team_members,
+        'current_month_entries': current_month_entries,
+        'entries': entries_qs.order_by('-date'), # Now shows filtered entries
+
+        # Data for charts
+        'pie_chart_labels': pie_chart_labels,
+        'pie_chart_data': pie_chart_data,
+        'bar_chart_labels': bar_chart_labels,
+        'bar_chart_data': bar_chart_data,
+
+        # Data needed for the filter form
+        'all_projects': projects_qs.order_by('name'),
+        'all_users': users_qs.order_by('username'),
+
+        # Pass current filter values back to the template
+        'selected_project_id': selected_project_id,
+        'selected_user_id': selected_user_id,
+        'start_date': start_date,
+        'end_date': end_date,
+    }
+    
+    return render(request, 'dashboard.html', context)
 
 
 @login_required
@@ -129,27 +198,39 @@ def my_work_entries_view(request):
 # --- Pricing Management Views ---
 
 @login_required
-def price_manage_view(request):
-    """Allows admins to create and view their list of prices."""
+def manage_prices_view(request):
+    """
+    Displays a list of prices and a form to add a new price.
+    Handles creation of new prices.
+    """
     user = request.user
     if user.role not in ['admin', 'super_admin']:
         return render(request, 'unauthorized.html')
 
-    if user.role == 'super_admin':
-        prices = Price.objects.all()
-    else:  # 'admin' role
-        prices = Price.objects.filter(managed_by=user)
-
+    # Price creation logic
     if request.method == 'POST':
         form = PriceForm(request.POST)
         if form.is_valid():
             price = form.save(commit=False)
             price.managed_by = user
             price.save()
-            return redirect('price_manage')
+            messages.success(request, f"Price for '{price.category}' was added successfully.")
+            return redirect('manage_prices')
     else:
         form = PriceForm()
-    return render(request, 'price_manage.html', {'form': form, 'prices': prices})
+
+    # Get the list of prices based on user role
+    if user.role == 'super_admin':
+        prices = Price.objects.all().order_by('category')
+    else:  # 'admin' role
+        prices = Price.objects.filter(managed_by=user).order_by('category')
+    
+    context = {
+        'form': form,
+        'prices': prices,
+    }
+    return render(request, 'manage_prices.html', context)
+
 
 
 @login_required
@@ -171,17 +252,21 @@ def price_edit_view(request, id):
 
 
 @login_required
-def price_delete_view(request, id):
-    """Handles deletion of a specific price, with ownership check."""
-    price = get_object_or_404(Price, id=id)
+def delete_price_view(request, price_id):
+    """
+    Deletes a specific price after ownership verification.
+    """
     user = request.user
+    price = get_object_or_404(Price, id=price_id)
+
+    # Security check
     if user.role != 'super_admin' and price.managed_by != user:
         return render(request, 'unauthorized.html')
-
-    if request.method == 'POST':
-        price.delete()
-        return redirect('price_manage')
-    return render(request, 'price_delete.html', {'price': price})
+    
+    category_name = price.category
+    price.delete()
+    messages.success(request, f"Price for '{category_name}' has been deleted.")
+    return redirect('manage_prices')
 
 
 # --- Reporting & Invoice Generation ---
@@ -192,6 +277,111 @@ def export_page_view(request):
     if request.user.role not in ['admin', 'super_admin']:
         return render(request, 'unauthorized.html')
     return render(request, 'export_page.html')
+
+@login_required
+def my_team_view(request):
+    """
+    Allows an admin to view their managed users and add new ones.
+    Sends a welcome email with a temporary password to the new user.
+    """
+    if request.user.role not in ['admin', 'super_admin']:
+        return render(request, 'unauthorized.html')
+
+    if request.method == 'POST':
+        form = AdminUserCreationForm(request.POST)
+        if form.is_valid():
+            new_user = form.save(commit=False)
+            
+            # --- সঠিক এবং চূড়ান্ত পদ্ধতিতে পাসওয়ার্ড তৈরি করা ---
+            password = get_random_string(length=12)
+            new_user.set_password(password)
+            
+            new_user.role = 'user'
+            new_user.managed_by = request.user
+            new_user.save()
+
+            # --- নতুন ইউজারকে ওয়েলকাম ইমেইল পাঠানো ---
+            mail_subject = 'Welcome to InvoiceApp!'
+            message = render_to_string('welcome_email.html', {
+                'user': new_user,
+                'password': password,
+                'admin_name': request.user.username,
+            })
+            
+            send_mail(
+                subject=mail_subject,
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[new_user.email],
+                html_message=message
+            )
+            
+            messages.success(request, f"User '{new_user.username}' was created successfully! A welcome email with credentials has been sent.")
+            return redirect('my_team')
+    else:
+        form = AdminUserCreationForm()
+
+    if request.user.role == 'super_admin':
+        managed_users = User.objects.filter(role='user')
+    else:
+        managed_users = User.objects.filter(managed_by=request.user)
+    
+    context = {
+        'form': form,
+        'managed_users': managed_users
+    }
+    return render(request, 'my_team.html', context)
+
+@login_required
+def manage_projects_view(request):
+    """
+    Allows admins to view, create, and manage their projects.
+    """
+    user = request.user
+    if user.role not in ['admin', 'super_admin']:
+        return render(request, 'unauthorized.html')
+
+    # Project creation logic
+    if request.method == 'POST':
+        form = ClientProjectForm(request.POST, request.FILES)
+        if form.is_valid():
+            project = form.save(commit=False)
+            project.created_by = user
+            project.managed_by = user
+            project.save()
+            messages.success(request, f"Project '{project.name}' was created successfully.")
+            return redirect('manage_projects')
+    else:
+        form = ClientProjectForm()
+
+    # Get the list of projects based on user role
+    if user.role == 'super_admin':
+        projects = ClientProject.objects.all().order_by('-start_date')
+    else:  # 'admin' role
+        projects = ClientProject.objects.filter(managed_by=user).order_by('-start_date')
+
+    context = {
+        'form': form,
+        'projects': projects,
+    }
+    return render(request, 'manage_projects.html', context)
+
+@login_required
+def delete_project_view(request, project_id):
+    """
+    Deletes a specific project after ownership verification.
+    """
+    user = request.user
+    project = get_object_or_404(ClientProject, id=project_id)
+
+    # Security check
+    if user.role != 'super_admin' and project.managed_by != user:
+        return render(request, 'unauthorized.html')
+
+    project_name = project.name
+    project.delete()
+    messages.success(request, f"Project '{project_name}' has been deleted.")
+    return redirect('manage_projects')
 
 
 @login_required
