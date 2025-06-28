@@ -17,13 +17,13 @@
 <h3>📋 Existing Prices</h3>
 <table border="1" cellpadding="5">
   <tr>
-    <th>Category</th>
+    <th>Folder Name</th>
     <th>Rate</th>
     <th>Actions</th>
   </tr>
   {% for price in prices %}
   <tr>
-    <td>{{ price.category }}</td>
+    <td>{{ price.Folder Name }}</td>
     <td>${{ price.rate }}</td>
     <td>
       <a href="{% url 'price_edit' price.id %}">Edit</a> |

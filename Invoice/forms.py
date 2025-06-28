@@ -62,7 +62,7 @@ class PriceForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         """Initializes the form and changes the 'category' field's label."""
         super().__init__(*args, **kwargs)
-        self.fields['category'].label = "Category"
+        self.fields['category'].label = "Folder Name"
 
 
 class AdminUserCreationForm(UserCreationForm):

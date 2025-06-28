@@ -252,12 +252,12 @@ def price_edit_view(request, id):
 
 
 @login_required
-def delete_price_view(request, price_id):
+def delete_price_view(request, id):
     """
     Deletes a specific price after ownership verification.
     """
     user = request.user
-    price = get_object_or_404(Price, id=price_id)
+    price = get_object_or_404(Price, id=id)
 
     # Security check
     if user.role != 'super_admin' and price.managed_by != user:
