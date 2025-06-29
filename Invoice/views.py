@@ -41,6 +41,8 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.crypto import get_random_string
+from django.db.models.functions import ExtractWeekDay
+
 
 # Third-Party Library Imports
 from openpyxl import Workbook, load_workbook
@@ -69,10 +71,8 @@ def home_view(request):
 @login_required
 def dashboard_template_view(request):
     """
-    Renders a comprehensive, interactive dashboard that includes:
-    - Summary cards.
-    - Advanced filtering for entries.
-    - Dynamic charts that update based on the filtered data.
+    Renders a comprehensive, interactive dashboard that includes summary cards,
+    advanced filtering, dynamic charts, and new analytics.
     """
     user = request.user
     if user.role == 'user':
@@ -103,21 +103,38 @@ def dashboard_template_view(request):
     if end_date:
         entries_qs = entries_qs.filter(date__lte=end_date)
     
-    # --- Step 3: Calculate Data for Cards (using filtered data) ---
+    # --- Step 3: Calculate Data for Existing Cards (using filtered data) ---
     total_projects = projects_qs.count()
     total_team_members = users_qs.count()
     current_month_entries = entries_qs.filter(
         date__year=timezone.now().year,
         date__month=timezone.now().month
     ).count()
+
+    # --- Step 4: Calculate Data for New Analytics Cards ---
+    # Busiest Day of the Week
+    busiest_day_query = entries_qs.annotate(
+        weekday=ExtractWeekDay('date')
+    ).values('weekday').annotate(count=Count('id')).order_by('-count').first()
     
-    # --- Step 4: Calculate Data for Charts (using the SAME filtered data) ---
-    # Pie Chart Data: Work distribution by category
+    if busiest_day_query:
+        weekday_map = {1: 'Sunday', 2: 'Monday', 3: 'Tuesday', 4: 'Wednesday', 5: 'Thursday', 6: 'Friday', 7: 'Saturday'}
+        busiest_day = weekday_map.get(busiest_day_query['weekday'], 'N/A')
+    else:
+        busiest_day = 'N/A'
+
+    # Most Productive User (by Quantity)
+    most_productive_user_query = entries_qs.values('user__username').annotate(
+        total_quantity=Sum('quantity')
+    ).order_by('-total_quantity').first()
+    
+    most_productive_user = most_productive_user_query['user__username'] if most_productive_user_query else 'N/A'
+    
+    # --- Step 5: Calculate Data for Charts ---
     category_data = entries_qs.values('category').annotate(count=Count('id')).order_by('-count')
     pie_chart_labels = [item['category'] for item in category_data]
     pie_chart_data = [item['count'] for item in category_data]
 
-    # Bar Chart Data: Monthly work entries
     monthly_data = (
         entries_qs.values('date__year', 'date__month')
         .annotate(count=Count('id'))
@@ -126,25 +143,24 @@ def dashboard_template_view(request):
     bar_chart_labels = [f"{item['date__year']}-{item['date__month']:02d}" for item in monthly_data]
     bar_chart_data = [item['count'] for item in monthly_data]
 
-    # --- Step 5: Prepare the Final Context for the Template ---
+    # --- Step 6: Prepare the Final Context for the Template ---
     context = {
-        # Data for cards
         'total_projects': total_projects,
         'total_team_members': total_team_members,
         'current_month_entries': current_month_entries,
-        'entries': entries_qs.order_by('-date'), # Now shows filtered entries
-
-        # Data for charts
+        'busiest_day': busiest_day, # নতুন ডেটা যোগ করা হয়েছে
+        'most_productive_user': most_productive_user, # নতুন ডেটা যোগ করা হয়েছে
+        
+        'entries': entries_qs.order_by('-date'),
+        
         'pie_chart_labels': pie_chart_labels,
         'pie_chart_data': pie_chart_data,
         'bar_chart_labels': bar_chart_labels,
         'bar_chart_data': bar_chart_data,
 
-        # Data needed for the filter form
         'all_projects': projects_qs.order_by('name'),
         'all_users': users_qs.order_by('username'),
 
-        # Pass current filter values back to the template
         'selected_project_id': selected_project_id,
         'selected_user_id': selected_user_id,
         'start_date': start_date,

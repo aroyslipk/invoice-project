@@ -52,27 +52,35 @@
     </div>
 
     <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card text-white bg-primary shadow">
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card text-white bg-primary shadow h-100">
                 <div class="card-body">
-                    <h5 class="card-title">Total Projects</h5>
+                    <h6 class="card-title">Total Projects</h6>
                     <p class="card-text fs-2 fw-bold">{{ total_projects }}</p>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card text-white bg-success shadow">
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card text-white bg-success shadow h-100">
                 <div class="card-body">
-                    <h5 class="card-title">Total Team Members</h5>
+                    <h6 class="card-title">Total Team Members</h6>
                     <p class="card-text fs-2 fw-bold">{{ total_team_members }}</p>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card text-white bg-info shadow">
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card text-dark bg-warning shadow h-100">
                 <div class="card-body">
-                    <h5 class="card-title">Work Entries This Month</h5>
-                    <p class="card-text fs-2 fw-bold">{{ current_month_entries }}</p>
+                    <h6 class="card-title">Most Productive User</h6>
+                    <p class="card-text fs-4 fw-bold">{{ most_productive_user }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card text-white bg-danger shadow h-100">
+                <div class="card-body">
+                    <h6 class="card-title">Busiest Day of the Week</h6>
+                    <p class="card-text fs-4 fw-bold">{{ busiest_day }}</p>
                 </div>
             </div>
         </div>
@@ -109,7 +117,8 @@
                             <th>Folder Name</th>
                             <th>Quantity</th>
                             <th>Date</th>
-                            <th>Actions</th> </tr>
+                            <th>Actions</th>
+                        </tr>
                     </thead>
                     <tbody>
                         {% for entry in entries %}
@@ -145,7 +154,7 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // --- Bar Chart: Monthly Entries ---
+    // Bar Chart Logic
     const barCtx = document.getElementById('barChart').getContext('2d');
     const barChart = new Chart(barCtx, {
         type: 'bar',
@@ -172,7 +181,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    // --- Pie Chart: Category Distribution ---
+    // Pie Chart Logic
     const pieCtx = document.getElementById('pieChart').getContext('2d');
     const pieChart = new Chart(pieCtx, {
         type: 'pie',
