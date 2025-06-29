@@ -444,8 +444,8 @@ def delete_project_view(request, project_id):
 @login_required
 def generate_invoice(request, project_id):
     """
-    Generates and downloads a secure, role-filtered XLSX invoice
-    using a robust method for finding the template file.
+    Generates and downloads a secure, role-filtered XLSX invoice,
+    showing sums for only the 'Quantity' and 'Total Amount' columns.
     """
     user = request.user
     project = get_object_or_404(ClientProject, id=project_id)
@@ -481,13 +481,12 @@ def generate_invoice(request, project_id):
             ws.insert_rows(start_row + 1, amount=len(entries) - 1)
         
         current_row = start_row
-        total_quantity_sum, total_rate_sum, total_amount_numeric = 0, 0, 0
+        total_quantity_sum, total_amount_numeric = 0, 0
         
         for entry in entries:
             rate_for_entry = float(prices.get(entry.category.lower(), 0))
             amount_for_entry = entry.quantity * rate_for_entry
             total_quantity_sum += entry.quantity
-            total_rate_sum += rate_for_entry
             total_amount_numeric += amount_for_entry
             
             # Populate data into cells
@@ -502,8 +501,7 @@ def generate_invoice(request, project_id):
         summary_start_row = start_row + len(entries) + 2
         ws.cell(row=summary_start_row, column=4).value = total_quantity_sum
         ws.cell(row=summary_start_row, column=4).font = Font(bold=True)
-        ws.cell(row=summary_start_row, column=5).value = total_rate_sum
-        ws.cell(row=summary_start_row, column=5).font = Font(bold=True)
+        
         ws.cell(row=summary_start_row, column=6).value = total_amount_numeric
         ws.cell(row=summary_start_row, column=6).font = Font(bold=True)
         
@@ -515,6 +513,7 @@ def generate_invoice(request, project_id):
 
     # --- Project attachment link (if exists) ---
     if project.attachment and hasattr(project.attachment, 'url'):
+        # এই কোডটুকু এখন ಸರಿಯಾಗಿ indent করা হয়েছে
         attachment_url = request.build_absolute_uri(project.attachment.url)
         attachment_cell = ws.cell(row=ws.max_row + 2, column=2)
         attachment_cell.value = "View Project Attachment"

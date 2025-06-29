@@ -60,32 +60,32 @@
                         </div>
                     </form>
 
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Project</th>
-                                    <th>Folder Name</th>
-                                    <th>Quantity</th>
-                                    <th>Date</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for entry in entries %}
-                                <tr>
-                                    <td>{{ entry.project.name|default:"N/A" }}</td>
-                                    <td>{{ entry.category }}</td>
-                                    <td>{{ entry.quantity }}</td>
-                                    <td>{{ entry.date|date:"d M Y" }}</td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="4" class="text-center">No work entries found.</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                    {% regroup entries by date as entries_by_date %}
+                    {% for group in entries_by_date %}
+                        <h5 class="mt-4 bg-light p-2 rounded">{{ group.grouper|date:"l, d F Y" }}</h5>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Project</th>
+                                        <th>Folder Name</th>
+                                        <th>Quantity</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for entry in group.list %}
+                                    <tr>
+                                        <td>{{ entry.project.name|default:"N/A" }}</td>
+                                        <td>{{ entry.category }}</td>
+                                        <td>{{ entry.quantity }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% empty %}
+                        <p class="text-center text-muted mt-4">No work entries found for the selected filters.</p>
+                    {% endfor %}
                 </div>
             </div>
         </div>

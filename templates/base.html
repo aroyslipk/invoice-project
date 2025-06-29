@@ -1,79 +1,45 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
+<html lang="en" class="h-100"> <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Invoice App by AnikRoy{% endblock %}</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-
+    
     <style>
-        /* You can add your own custom styles here */
+        /* এই নতুন স্টাইলটি আপনার সমস্যার সমাধান করবে */
         body {
-            background-color: #f8f9fa; /* A light grey background for the body */
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh; /* Viewport-এর সম্পূর্ণ উচ্চতা নিতে বলা হচ্ছে */
         }
         main.container {
-            min-height: 75vh; /* Ensures the footer stays down on short pages */
+            flex: 1; /* main অংশকে বাকি সব খালি জায়গা নিতে বলা হচ্ছে */
+            padding-top: 2rem;
+            padding-bottom: 2rem;
         }
         footer {
-            padding: 1rem 0;
+            flex-shrink: 0; /* ফুটারকে সঙ্কুচিত হতে বাধা দেওয়া হচ্ছে */
+            padding: 1.5rem 0;
             text-align: center;
             font-size: 0.9em;
             color: #6c757d;
             background-color: #ffffff;
             border-top: 1px solid #dee2e6;
         }
+        .navbar {
+            margin-bottom: 0; /* নেভিগেশন বারের নিচের মার্জিন সরানো হয়েছে */
+        }
     </style>
 </head>
-<body>
-
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm mb-4">
-    <div class="container">
-        <a class="navbar-brand" href="{% url 'home' %}">🧾 InvoiceApp</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-                {% if user.is_authenticated %}
-                    
-                    {% if user.role == 'super_admin' or user.role == 'admin' %}
-                        <li class="nav-item"><a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{% url 'my_team' %}">My Team</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{% url 'manage_projects' %}">Manage Projects</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{% url 'manage_prices' %}">Manage Prices</a></li>
-                    {% endif %}
-
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarUserDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            Welcome, {{ user.username }}!
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarUserDropdown">
-                            <li><a class="dropdown-item" href="{% url 'admin:index' %}">Admin Panel</a></li>
-                            <li><hr class="dropdown-divider"></li>                           
-                            <li><a class="dropdown-item" href="{% url 'logout' %}">Logout</a></li>
-
-
-                        </ul>
-                    </li>
-
-                {% else %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/login/">Login</a>
-                    </li>
-                {% endif %}
-            </ul>
-        </div>
-    </div>
-</nav>
+<body class="d-flex flex-column h-100"> {% include 'partials/_navbar.html' %}
 
     <main class="container">
         {% block content %}
         {% endblock %}
     </main>
 
-    <footer>
-        <p>&copy; {% now "Y" %} AnikRoy. All Rights Reserved.</p>
+    <footer class="mt-auto"> <p>&copy; {% now "Y" %} AnikRoy. All Rights Reserved.</p>
     </footer>
 
     {% block scripts %}{% endblock %}

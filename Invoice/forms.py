@@ -22,31 +22,45 @@ from .models import User, WorkEntry, ClientProject, Price
 
 
 class WorkEntryForm(forms.ModelForm):
-    """A form for users to submit their daily work entries."""
+    """
+    A form for users to submit their work entries.
+    The label for 'category' is customized to 'Folder Name'.
+    """
+    # The 'category' field is now a dropdown menu linked to the Price model
+    category = forms.ModelChoiceField(
+        queryset=Price.objects.none(),
+        label="Folder Name", # <-- This is the change
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    
     class Meta:
         model = WorkEntry
         fields = ['project', 'category', 'quantity', 'date']
         widgets = {
+            'project': forms.Select(attrs={'class': 'form-select'}),
+            'quantity': forms.NumberInput(attrs={'class': 'form-control'}),
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
         }
-
+    
     def __init__(self, *args, **kwargs):
-        """Initializes the form and filters the 'project' queryset."""
         user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
+        
+        if user and user.role == 'user' and user.managed_by:
+            admin_user = user.managed_by
+            # The dropdowns will be filtered based on the user's admin
+            self.fields['project'].queryset = ClientProject.objects.filter(managed_by=admin_user)
+            self.fields['category'].queryset = Price.objects.filter(managed_by=admin_user)
+            # The text shown in the dropdown will be the category name from the Price model
+            self.fields['category'].label_from_instance = lambda obj: obj.category
 
-        if not user:
-            self.fields['project'].queryset = ClientProject.objects.none()
-            return
+    def save(self, commit=True):
+        # The form returns a Price object, so we extract the category name string to save
+        price_object = self.cleaned_data.get('category')
+        if price_object:
+            self.instance.category = price_object.category
+        return super().save(commit)
 
-        if user.role == 'user' and hasattr(user, 'managed_by') and user.managed_by:
-            self.fields['project'].queryset = ClientProject.objects.filter(managed_by=user.managed_by)
-        elif user.role == 'admin':
-            self.fields['project'].queryset = ClientProject.objects.filter(managed_by=user)
-        elif user.role == 'super_admin':
-            self.fields['project'].queryset = ClientProject.objects.all()
-        else:
-            self.fields['project'].queryset = ClientProject.objects.none()
 
 
 class PriceForm(forms.ModelForm):
