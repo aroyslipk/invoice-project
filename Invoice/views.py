@@ -21,6 +21,7 @@ import datetime
 from pathlib import Path
 from copy import copy
 import os
+import json
 
 # Django Core Imports
 from django.contrib.auth import login
@@ -188,11 +189,67 @@ def work_entry_form_view(request):
 
 @login_required
 def my_work_entries_view(request):
-    """Displays a list of work entries submitted by the current user."""
+    """
+    Displays a comprehensive dashboard for the user, including summary cards,
+    a calendar view, search/filter functionality, and a list of their work entries.
+    """
     if request.user.role != 'user':
         return render(request, 'unauthorized.html')
-    work_entries = WorkEntry.objects.filter(user=request.user).select_related('project').order_by('-date')
-    return render(request, 'my_work_entries.html', {'entries': work_entries})
+
+    user = request.user
+    now = timezone.now()
+    work_entries = WorkEntry.objects.filter(user=user).select_related('project')
+
+    # --- ফিল্টার লজিক ---
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    query = request.GET.get('query')
+
+    if start_date:
+        work_entries = work_entries.filter(date__gte=start_date)
+    if end_date:
+        work_entries = work_entries.filter(date__lte=end_date)
+    if query:
+        work_entries = work_entries.filter(category__icontains=query)
+
+    # --- সারসংক্ষেপ কার্ডের জন্য ডেটা গণনা ---
+    total_entries_month = work_entries.filter(
+        date__year=now.year, date__month=now.month
+    ).count()
+
+    quantity_sum_result = work_entries.filter(
+        date__year=now.year, date__month=now.month
+    ).aggregate(total_quantity=Sum('quantity'))
+    total_quantity_month = quantity_sum_result['total_quantity'] or 0
+
+    frequent_project_query = work_entries.values('project__name').annotate(
+        count=Count('project')
+    ).order_by('-count').first()
+    most_frequent_project = frequent_project_query['project__name'] if frequent_project_query else 'N/A'
+
+    # --- ক্যালেন্ডারের জন্য ডেটা প্রস্তুত করা ---
+    calendar_events = []
+    entry_dates = work_entries.values('date').distinct()
+    for entry_date in entry_dates:
+        calendar_events.append({
+            'title': 'Work Submitted',
+            'start': entry_date['date'].strftime('%Y-%m-%d'),
+            'allDay': True
+        })
+
+    context = {
+        'entries': work_entries.order_by('-date'),
+        'total_entries_month': total_entries_month,
+        'total_quantity_month': total_quantity_month,
+        'most_frequent_project': most_frequent_project,
+        'calendar_events_json': json.dumps(calendar_events),
+        # ফিল্টারের মানগুলো টেমপ্লেটে ফেরত পাঠানো
+        'start_date': start_date,
+        'end_date': end_date,
+        'query': query,
+    }
+    
+    return render(request, 'my_work_entries.html', context)
 
 
 # --- Pricing Management Views ---
